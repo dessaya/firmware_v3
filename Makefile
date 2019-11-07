@@ -37,6 +37,7 @@ endif
 VERBOSE=n
 OPT=g
 USE_NANO=y
+USE_LTO=n
 SEMIHOST=n
 USE_FPU=y
 # Libraries
@@ -50,13 +51,12 @@ USE_SAPI=y
 
 MODULES=$(sort $(dir $(wildcard libs/*/)))
 SRC+=$(wildcard $(PROGRAM_PATH_AND_NAME)/src/*.c)
-#SRC=$(wildcard $(PROGRAM_PATH_AND_NAME)/src/*.c)
 SRC+=$(foreach m, $(MODULES), $(wildcard $(m)/src/*.c))
 
-CXXSRC=$(wildcard $(PROGRAM_PATH_AND_NAME)/src/*.cpp)
+CXXSRC+=$(wildcard $(PROGRAM_PATH_AND_NAME)/src/*.cpp)
 CXXSRC+=$(foreach m, $(MODULES), $(wildcard $(m)/src/*.cpp))
 
-ASRC=$(wildcard $(PROGRAM_PATH_AND_NAME)/src/*.s)
+ASRC+=$(wildcard $(PROGRAM_PATH_AND_NAME)/src/*.s)
 ASRC+=$(foreach m, $(MODULES), $(wildcard $(m)/src/*.s))
 
 OUT=$(PROGRAM_PATH_AND_NAME)/out
@@ -90,6 +90,14 @@ LDFLAGS+=-nostartfiles -Wl,-gc-sections -Wl,-Map=$(TARGET_MAP) -Wl,--cref
 
 ifeq ($(USE_NANO),y)
 LDFLAGS+=--specs=nano.specs
+endif
+
+ifeq ($(USE_LTO),y)
+ifeq ($(OPT),g)
+$(warning "Using LTO in debug may cause inconsistences in debug")
+endif
+COMMON_FLAGS+=-flto
+LDFLAGS+=-flto
 endif
 
 ifeq ($(SEMIHOST),y)
@@ -211,7 +219,7 @@ OOCD_SCRIPT=scripts/openocd/lpc4337.cfg
 	$(Q)$(OOCD) -f $(OOCD_SCRIPT) \
 		-c "init" \
 		-c "halt 0" \
-		-c "flash write_image erase unlock $< 0x1A000000 bin" \
+		-c "flash write_image erase $< 0x1A000000 bin" \
 		-c "reset run" \
 		-c "shutdown" 2>&1
 
