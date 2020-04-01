@@ -57,15 +57,22 @@ SRC+=$(foreach m, $(MODULES), $(wildcard $(m)/src/*.c))
 CXXSRC+=$(wildcard $(PROGRAM_PATH_AND_NAME)/src/*.cpp)
 CXXSRC+=$(foreach m, $(MODULES), $(wildcard $(m)/src/*.cpp))
 
+# Arduino
+INOSRC+=$(wildcard $(PROGRAM_PATH_AND_NAME)/src/*.ino)
+INOSRC+=$(foreach m, $(MODULES), $(wildcard $(m)/src/*.ino))
+
 ASRC+=$(wildcard $(PROGRAM_PATH_AND_NAME)/src/*.s)
 ASRC+=$(foreach m, $(MODULES), $(wildcard $(m)/src/*.s))
 
 OUT=$(PROGRAM_PATH_AND_NAME)/out
-OBJECTS=$(CXXSRC:%.cpp=$(OUT)/%.o) $(ASRC:%.s=$(OUT)/%.o) $(SRC:%.c=$(OUT)/%.o)
+# Arduino
+OBJECTS=$(INOSRC:%.ino=$(OUT)/%.o) $(CXXSRC:%.cpp=$(OUT)/%.o) $(SRC:%.c=$(OUT)/%.o) $(ASRC:%.s=$(OUT)/%.o)
+
 DEPS=$(OBJECTS:%.o=%.d)
 
 TARGET=$(OUT)/$(PROGRAM_NAME).elf
 TARGET_BIN=$(basename $(TARGET)).bin
+TARGET_HEX=$(basename $(TARGET)).hex
 TARGET_LST=$(basename $(TARGET)).lst
 TARGET_MAP=$(basename $(TARGET)).map
 TARGET_NM=$(basename $(TARGET)).names.csv
@@ -81,6 +88,8 @@ COMMON_FLAGS=$(ARCH_FLAGS) $(DEFINES_FLAGS) $(INCLUDE_FLAGS) $(OPT_FLAGS) -DBOAR
 
 CFLAGS=$(COMMON_FLAGS) -std=c99
 CXXFLAGS=$(COMMON_FLAGS) -fno-rtti -fno-exceptions -std=c++11
+# Arduino
+INOFLAGS=$(CXXFLAGS) -x c++ -include Arduino.h
 
 LDFLAGS=$(ARCH_FLAGS)
 LDFLAGS+=$(addprefix -L, $(foreach m, $(MODULES), $(wildcard $(m)/lib)))
@@ -89,11 +98,18 @@ LDFLAGS+=$(addprefix -l, $(LIBS))
 LDFLAGS+=-T$(LDSCRIPT)
 LDFLAGS+=-nostartfiles -Wl,-gc-sections -Wl,-Map=$(TARGET_MAP) -Wl,--cref
 
+$(info Using optimization level $(OPT))
+#$(info Using debug level $(DEBUG_LEVEL))
+
 ifeq ($(USE_NANO),y)
+$(info Using newlib nano. No printf with floats supported)
 LDFLAGS+=--specs=nano.specs
+else
+$(info Using newlib)
 endif
 
 ifeq ($(USE_LTO),y)
+$(info Using LTO)
 ifeq ($(OPT),g)
 $(warning "Using LTO in debug may cause inconsistences in debug")
 endif
@@ -102,6 +118,7 @@ LDFLAGS+=-flto
 endif
 
 ifeq ($(SEMIHOST),y)
+$(info Using semihosting)
 DEFINES+=USE_SEMIHOST
 LDFLAGS+=--specs=rdimon.specs
 endif
@@ -120,6 +137,7 @@ OBJCOPY=$(CROSS)objcopy
 NM=$(CROSS)nm
 GDB=$(CROSS)gdb
 
+# TODO: Create vervose level Q, QQ, QQQ
 ifeq ($(VERBOSE),y)
 Q=
 else
@@ -128,7 +146,7 @@ endif
 
 # Build program --------------------------------------------------------
 
-all: $(OUT) .try_enforce_no_gpl $(TARGET) $(TARGET_BIN) $(TARGET_LST) $(TARGET_NM) size
+all: $(OUT) .try_enforce_no_gpl $(TARGET) $(TARGET_BIN) $(TARGET_HEX) $(TARGET_LST) $(TARGET_NM) size
 	@echo 
 	@echo Selected program: $(PROGRAM_PATH_AND_NAME)
 	@echo Selected board: $(BOARD)
@@ -149,6 +167,11 @@ $(OUT)/%.o: %.cpp
 	@echo CXX $(notdir $<)
 	@mkdir -p $(dir $@)
 	$(Q)$(CXX) -MMD $(CXXFLAGS) -c -o $@ $<
+
+$(OUT)/%.o: %.ino
+	@echo ARDUINO CXX $(notdir $<)
+	@mkdir -p $(dir $@)
+	$(Q)$(CXX) -MMD $(INOFLAGS) -c -o $@ $<
 
 $(OUT)/%.o: %.s
 	@echo AS $(notdir $<)
@@ -174,6 +197,11 @@ $(TARGET_BIN): $(TARGET)
 	@mkdir -p $(dir $@)
 	$(Q)$(OBJCOPY) -O binary $< $@
 
+$(TARGET_HEX): $(TARGET)
+	@echo COPY $(notdir $<) TO $(notdir $@)
+	@mkdir -p $(dir $@)
+	$(Q)$(OBJCOPY) -O ihex $< $@
+
 $(TARGET_LST): $(TARGET)
 	@echo LIST
 	$(Q)$(LIST) $< > $@
@@ -193,6 +221,7 @@ $(TARGET_NM): $(TARGET)
 
 # Build program size
 size: $(TARGET)
+	@echo SIZEOF $(notdir $<)...
 	$(Q)$(SIZE) $<
 
 # Information
@@ -246,12 +275,15 @@ endif
 
 # Erase Flash memory of board
 erase:
-	@echo ERASE
+	@echo ERASE FLASH
 	$(Q)$(OOCD) -f $(OOCD_SCRIPT) \
 		-c "init" \
 		-c "halt 0" \
 		-c "flash erase_sector 0 0 last" \
 		-c "shutdown" 2>&1
+	@echo
+	@echo Done.
+	@echo Please reset your Board.
 
 # DEBUG with Embedded IDE (debug)
 .debug:
@@ -259,9 +291,17 @@ erase:
 	$(Q)$(OOCD) -f $(OOCD_SCRIPT) 2>&1
 
 # DEBUG with Embedded IDE (run)
-.run: $(TARGET)
-	$(Q)$(OOCD) -f $(OOCD_SCRIPT) &
-	$(Q)socketwaiter :3333 && arm-none-eabi-gdb -batch $(TARGET) -x scripts/openocd/gdbinit
+.run_gdb: $(TARGET)
+	$(Q)socketwaiter :3333 && gdbfront $(TARGET) --start \
+	--gdb arm-none-eabi-gdb \
+	--gdbcmd="target remote :3333" \
+	--gdbcmd="monitor reset halt" \
+	--gdbcmd="load" \
+	--gdbcmd="break main" \
+	--gdbcmd="continue"
+
+debug:
+	@$(MAKE) -j 2 .debug .run_gdb
 
 # TEST: Run hardware tests
 .hardware_test: $(TARGET)
