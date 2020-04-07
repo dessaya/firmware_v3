@@ -98,18 +98,18 @@ LDFLAGS+=$(addprefix -l, $(LIBS))
 LDFLAGS+=-T$(LDSCRIPT)
 LDFLAGS+=-nostartfiles -Wl,-gc-sections -Wl,-Map=$(TARGET_MAP) -Wl,--cref
 
-$(info Using optimization level $(OPT))
+#$(info Using optimization level $(OPT))
 #$(info Using debug level $(DEBUG_LEVEL))
 
 ifeq ($(USE_NANO),y)
-$(info Using newlib nano. No printf with floats supported)
+#$(info Using newlib nano. No printf with floats supported)
 LDFLAGS+=--specs=nano.specs
 else
-$(info Using newlib)
+#$(info Using newlib)
 endif
 
 ifeq ($(USE_LTO),y)
-$(info Using LTO)
+#$(info Using LTO)
 ifeq ($(OPT),g)
 $(warning "Using LTO in debug may cause inconsistences in debug")
 endif
@@ -118,7 +118,7 @@ LDFLAGS+=-flto
 endif
 
 ifeq ($(SEMIHOST),y)
-$(info Using semihosting)
+#$(info Using semihosting)
 DEFINES+=USE_SEMIHOST
 LDFLAGS+=--specs=rdimon.specs
 endif
