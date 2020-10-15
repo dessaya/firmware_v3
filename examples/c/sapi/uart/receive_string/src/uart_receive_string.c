@@ -28,115 +28,80 @@
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- *
  */
 
-/*
- * Date: 2016-12-11
- */
+// File creation date: 2016-12-11
 
-/*==================[inclusions]=============================================*/
+//==================[inclusions]===============================================
 
 #include "sapi.h"     // <= sAPI header
+#include "string.h"
 
-/*==================[macros and definitions]=================================*/
+// FUNCION PRINCIPAL, PUNTO DE ENTRADA AL PROGRAMA LUEGO DE RESET. ============
+int main(void)
+{
+    // ------------- INICIALIZACIONES -------------
 
-/*==================[internal data declaration]==============================*/
+    // Inicializar la placa
+    boardInit();
 
-/*==================[internal functions declaration]=========================*/
+    // Inicializar UART_USB a 115200 baudios
+    uartInit( UART_USB, 115200 );
 
-/*==================[internal data definition]===============================*/
+    char miTexto[] = "todo bien";
 
-/*==================[external data definition]===============================*/
+    parser_t parser;
+    parserStatus_t parserStatus;
 
-/*==================[internal functions definition]==========================*/
+    uartWriteString( UART_USB, "Se espera a que el usuario escriba \"todo bien\",\r\n" );
+    uartWriteString( UART_USB, "o sale por timeout (10 segundos) y vuelve a esperar\r\n" );
+    uartWriteString( UART_USB, "a que se escriba el mensaje.\r\n" );
 
-/*==================[external functions definition]==========================*/
+    parserInit( &parser,         // Instance 
+                UART_USB,        // UART
+                miTexto,         // String
+                strlen(miTexto), // String lenght
+                10000 );         // Timeout
 
+    parserStart( &parser ); 
+    uartWriteString( UART_USB, "\r\nParser running\r\n" );
 
-/**
- * C++ version 0.4 char* style "itoa":
- * Written by Lukás Chmela
- * Released under GPLv3.
+    // ------------- REPETIR POR SIEMPRE -------------
+    while( true ) {
 
- */
-char* itoa(int value, char* result, int base) {
-   // check that the base if valid
-   if (base < 2 || base > 36) { *result = '\0'; return result; }
+        parserStatus = parserPatternMatchOrTimeout( &parser );
 
-   char* ptr = result, *ptr1 = result, tmp_char;
-   int tmp_value;
+        // Si no lo recibe indica que salio de la funcion
+        // waitForReceiveStringOrTimeoutBlocking  por timeout.
+        if( parserStatus == PARSER_TIMEOUT ) {
+            uartWriteString( UART_USB, "\r\nSalio por timeout\r\n" );
+            parserStart( &parser ); // Relanzo el parser
+        }
 
-   do {
-      tmp_value = value;
-      value /= base;
-      *ptr++ = "zyxwvutsrqponmlkjihgfedcba9876543210123456789abcdefghijklmnopqrstuvwxyz" [35 + (tmp_value - value * base)];
-   } while ( value );
+        // Si recibe el string almacenado en miTexto indica que llego el
+        // mensaje esperado.
+        if( parserStatus == PARSER_RECEIVED_OK ) {
+            uartWriteString( UART_USB, "\r\nLlego el mensaje esperado\r\n" );
+            parserStart( &parser ); // Relanzo el parser
+        }
 
-   // Apply negative sign
-   if (tmp_value < 0) *ptr++ = '-';
-   *ptr-- = '\0';
-   while(ptr1 < ptr) {
-      tmp_char = *ptr;
-      *ptr--= *ptr1;
-      *ptr1++ = tmp_char;
-   }
-   return result;
+        if( !gpioRead(TEC1) ) {
+            parserStart( &parser );
+            uartWriteString( UART_USB, "\r\nParser running\r\n" );
+            delay(500);
+        } 
+
+        if( !gpioRead(TEC2) ) {
+            parserStop( &parser );
+            uartWriteString( UART_USB, "\r\nParser stop\r\n" );
+            delay(500);
+        } 
+
+    }
+
+    // NO DEBE LLEGAR NUNCA AQUI, debido a que a este programa no es llamado
+    // por ningun S.O.
+    return 0 ;
 }
 
-
-/* FUNCION PRINCIPAL, PUNTO DE ENTRADA AL PROGRAMA LUEGO DE RESET. */
-int main(void){
-
-   /* ------------- INICIALIZACIONES ------------- */
-
-   /* Inicializar la placa */
-   boardConfig();
-
-   /* Inicializar UART_USB a 115200 baudios */
-   uartConfig( UART_USB, 115200 );
-
-   char miTexto[] = "todo bien";
-
-   waitForReceiveStringOrTimeout_t waitText;
-   waitForReceiveStringOrTimeoutState_t waitTextState;
-
-   uartWriteString( UART_USB, "Se espera a que el usuario escriba \"todo bien\",\r\n" );
-   uartWriteString( UART_USB, "o sale por timeout (10 segundos) y vuelve a esperar\r\n" );
-   uartWriteString( UART_USB, "a que se escriba el mensaje.\r\n" );
-
-   /* ------------- REPETIR POR SIEMPRE ------------- */
-   while(1) {
-
-      waitTextState = UART_RECEIVE_STRING_CONFIG;
-
-      waitText.state = UART_RECEIVE_STRING_CONFIG;
-      waitText.string =  miTexto;
-      waitText.stringSize = sizeof(miTexto);
-      waitText.timeout = 10000;
-
-      while( waitTextState != UART_RECEIVE_STRING_RECEIVED_OK &&
-             waitTextState != UART_RECEIVE_STRING_TIMEOUT ){
-         waitTextState = waitForReceiveStringOrTimeout( UART_USB, &waitText );
-      }
-
-      /* Si no lo recibe indica que salio de la funcion
-       * waitForReceiveStringOrTimeoutBlocking  por timeout. */
-      if( waitTextState == UART_RECEIVE_STRING_TIMEOUT ){
-         uartWriteString( UART_USB, "\r\nSalio por timeout\r\n" );
-      }
-
-      /* Si recibe el string almacenado en miTexto indica que llego el
-       * mensaje esperado. */
-      if( waitTextState == UART_RECEIVE_STRING_RECEIVED_OK ){
-         uartWriteString( UART_USB, "\r\nLlego el mensaje esperado\r\n" );
-      }
-
-   }
-
-   /* NO DEBE LLEGAR NUNCA AQUI, debido a que a este programa no es llamado
-      por ningun S.O. */
-   return 0 ;
-}
-
-/*==================[end of file]============================================*/
+//==================[end of file]==============================================

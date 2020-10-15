@@ -18,7 +18,8 @@
       <li><a style="text-decoration: none;" href="#2-compilar-proyecto-firmware_v3-en-eclipse">2. Compilar proyecto firmware_v3 en Eclipse</a></li>
       <ul style="list-style:none;">
          <li><a style="text-decoration: none;" href="#21-configurar-opciones-de-compilación">2.1. Configurar opciones de compilación</a></li>
-         <li><a style="text-decoration: none;" href="#22-compilar-proyecto">2.2. Compilar proyecto</a></li>
+         <li><a style="text-decoration: none;" href="#22-configurar-rutas-y-símbolos">2.2. Configurar rutas y símbolos</a></li>
+         <li><a style="text-decoration: none;" href="#23-compilar-proyecto">2.3. Compilar proyecto</a></li>
       </ul>
       <li><a style="text-decoration: none;" href="#3-configurar-y-ejecutar-targets-de-de-makefile-en-eclipse">3. Configurar y ejecutar <em>targets</em> de <em>makefile</em> en Eclipse</a></li>
       <ul style="list-style:none;">
@@ -119,7 +120,34 @@ Presionar *"Apply and Close*" para aplicar la configuración.
 
 ![Eclipse-08](Eclipse-Win08.png)
 
-### 2.2. Compilar proyecto
+### 2.2. Configurar rutas y símbolos
+
+El programa compilará correctamente si no se realiza este paso pero puede confundir al usuario pensando que existen muchos errores donde en realidad no los hay. Esto se debe a que Eclipse busca automáticamente los símbolos y si no los encuentra los subraya en rojo como errores aunque no lo sean.
+Eclipse marcará subrayados en rojo tipos de datos estandar (por ejemplo, ```uint8_t```), constantes definidas en las bibliotecas (ejemplo, ```LED``` de sAPI), entre otros.
+Para solucionar esto deberá hacer click derecho sobre el proyecto "firmware_v3" y luego en la opción "*Properties*". 
+En la ventana que se abre debe:
+
+1. Hacer click sobre la flecha de la opción *"C/C++ General"* para desplegrar el menú.
+2. Hacer click en la opción *"Preprocessor Include Paths, Macross, etc."*.
+3. En el área a la derecha que se abre clickear sobre la tab *"Providers"*.
+4. Tildar el checkbox *"CDT ARM Cross GCC Built-in Compiler Settings"*.
+5. Bajo la lista de checkboxes en el campo de texto *"Command to get compiler specs"* deberá ingresar un comando muy largo que incluye todos los CFLAGS. Este comando se pueden obtener ejecutando en una Terminal (en Linux) o (Busybox en Windows) el comando ```make .print_eclipse_cfg``` desde la raiz de la carpeta firmware_v3. Este comando cambia en base a cambios en las bibliotecas (carpeta libs), cambios de plataforma (BOARD) defines de compilación condicional. En estos casos deberá actualizar este campo.
+6. Presionar *"Apply"* para aplicar la configuración.
+7. Presionar *"Apply and Close"* para aplicar la configuración y cerrar la ventana de propiedades.
+
+![Eclipse-23](Eclipse-Win23.png)
+
+Captura del comando ```make .print_eclipse_cfg``` en Windows:
+
+![Eclipse-24](Eclipse-Win24.png)
+
+En este caso se debe copiar:
+
+```
+arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16 -D__USE_LPCOPEN -DCHIP_LPC43XX -DARM_MATH_CM4 -D__USE_NEWLIB -DCORE_M4 -D__FPU_PRESENT=1U -DUSE_SAPI -Ilibs/arduino//inc -Ilibs/cmsis_core//inc -Ilibs/cmsis_dsp//inc -Ilibs/editline//inc -Ilibs/fatfs//inc -Ilibs/freertos//inc -Ilibs/lpc_fatfs_disks//inc -Ilibs/lpc_open//inc -Ilibs/lpcusblib//inc -Ilibs/minut//inc -Ilibs/plc//inc -Ilibs/rkh//inc -Ilibs/sapi//inc -Ilibs/seos_pont_2014//inc -Ilibs/sys_newlib//inc -Ilibs/tinyprintf//inc -Iexamples/c/sapi/lcd/lcd_gpio/inc -Ilibs/lpc_open/boards/edu_ciaa_nxp/inc -Ilibs/lpc_open/boards/inc -Ilibs/lpc_open/lpc_chip_43xx/inc -Ilibs/lpc_open/lpc_chip_43xx/usbd_rom -Ilibs/lpc_open/lpc_startup/inc -Ilibs/sapi/sapi_v0.6.2/base/inc -Ilibs/sapi/sapi_v0.6.2/soc/core/inc -Ilibs/sapi/sapi_v0.6.2/soc/peripherals/inc -Ilibs/sapi/sapi_v0.6.2/soc/peripherals/usb/device/inc -Ilibs/sapi/sapi_v0.6.2/soc/peripherals/usb/host/inc -Ilibs/sapi/sapi_v0.6.2/board/inc -Ilibs/sapi/sapi_v0.6.2/abstract_modules/inc -Ilibs/sapi/sapi_v0.6.2/external_peripherals/display/fonts/inc -Ilibs/sapi/sapi_v0.6.2/external_peripherals/display/fonts/greek_chars_5x7/inc -Ilibs/sapi/sapi_v0.6.2/external_peripherals/display/fonts/icon_chars_5x7/inc -Ilibs/sapi/sapi_v0.6.2/external_peripherals/display/lcd/inc -Ilibs/sapi/sapi_v0.6.2/external_peripherals/display/led_segments/7segment/inc -Ilibs/sapi/sapi_v0.6.2/external_peripherals/imu/mpu60X0/inc -Ilibs/sapi/sapi_v0.6.2/external_peripherals/imu/mpu9250/inc -Ilibs/sapi/sapi_v0.6.2/external_peripherals/keypad/inc -Ilibs/sapi/sapi_v0.6.2/external_peripherals/led_rgb/inc -Ilibs/sapi/sapi_v0.6.2/external_peripherals/magnetometer/hmc5883l/inc -Ilibs/sapi/sapi_v0.6.2/external_peripherals/magnetometer/qmc5883l/inc -Ilibs/sapi/sapi_v0.6.2/external_peripherals/memory/eeprom/inc -Ilibs/sapi/sapi_v0.6.2/external_peripherals/motor/servo/inc -Ilibs/sapi/sapi_v0.6.2/external_peripherals/temperature_humudity/dht11/inc -Ilibs/sapi/sapi_v0.6.2/external_peripherals/ultrasonic/hcsr04/inc -Ilibs/sapi/sapi_v0.6.2/external_peripherals/wifi/esp8266_at/inc -ggdb3 -Og -ffunction-sections -fdata-sections -DBOARD=edu_ciaa_nxp -std=c99 -E -P -v -dD "${INPUTS}"
+```
+
+### 2.3. Compilar proyecto
 
 Para compilar el proyecto puede realizarlo mediante el icono del martillo (*Build*), o mediante la opción "*Build*" presionando el botón derecho sobre el proyecto firmware_v3.
 

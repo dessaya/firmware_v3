@@ -41,9 +41,11 @@ USE_LTO=n
 SEMIHOST=n
 USE_FPU=y
 ENFORCE_NOGPL=n
+M0_APP=
 # Libraries
 USE_LPCOPEN=y
 USE_SAPI=y
+USE_M0=n
 
 # Include config.mk file from program
 -include $(PROGRAM_PATH_AND_NAME)/config.mk
@@ -64,9 +66,18 @@ INOSRC+=$(foreach m, $(MODULES), $(wildcard $(m)/src/*.ino))
 ASRC+=$(wildcard $(PROGRAM_PATH_AND_NAME)/src/*.s)
 ASRC+=$(foreach m, $(MODULES), $(wildcard $(m)/src/*.s))
 
+ASSRC+=$(wildcard $(PROGRAM_PATH_AND_NAME)/src/*.sx)
+ASSRC+=$(foreach m, $(MODULES), $(wildcard $(m)/src/*.sx))
+
 OUT=$(PROGRAM_PATH_AND_NAME)/out
-# Arduino
-OBJECTS=$(INOSRC:%.ino=$(OUT)/%.o) $(CXXSRC:%.cpp=$(OUT)/%.o) $(SRC:%.c=$(OUT)/%.o) $(ASRC:%.s=$(OUT)/%.o)
+
+OBJECTS=$(INOSRC:%.ino=$(OUT)/%.o)
+OBJECTS+=$(CXXSRC:%.cpp=$(OUT)/%.o)
+OBJECTS+=$(SRC:%.c=$(OUT)/%.o)
+OBJECTS+=$(ASRC:%.s=$(OUT)/%.o)
+OBJECTS+=$(ASSRC:%.sx=$(OUT)/%.o)
+
+$(info $(OBJECTS))
 
 DEPS=$(OBJECTS:%.o=%.d)
 
@@ -146,10 +157,24 @@ endif
 
 # Build program --------------------------------------------------------
 
-all: $(OUT) .try_enforce_no_gpl $(TARGET) $(TARGET_BIN) $(TARGET_HEX) $(TARGET_LST) $(TARGET_NM) size
+all: .m0app $(OUT) .try_enforce_no_gpl $(TARGET) $(TARGET_BIN) $(TARGET_HEX) $(TARGET_LST) $(TARGET_NM) size
 	@echo 
 	@echo Selected program: $(PROGRAM_PATH_AND_NAME)
 	@echo Selected board: $(BOARD)
+
+ifeq ($(M0_APP),)
+.m0app: ;
+.m0app_clean: ;
+else
+.m0app:
+	@echo M0 APP: PROGRAM_PATH=$(dir $(M0_APP)) PROGRAM_NAME=$(notdir $(M0_APP))
+	@$(MAKE) PROGRAM_PATH=$(dir $(M0_APP)) PROGRAM_NAME=$(notdir $(M0_APP)) USE_M0=y all
+
+.m0app_clean:
+	@echo M0 APP CLEAN: PROGRAM_PATH=$(dir $(M0_APP)) PROGRAM_NAME=$(notdir $(M0_APP))
+	@$(MAKE) PROGRAM_PATH=$(dir $(M0_APP)) PROGRAM_NAME=$(notdir $(M0_APP)) USE_M0=y clean
+
+endif
 
 -include $(foreach m, $(MODULES), $(wildcard $(m)/module.mk))
 
@@ -175,6 +200,11 @@ $(OUT)/%.o: %.ino
 
 $(OUT)/%.o: %.s
 	@echo AS $(notdir $<)
+	@mkdir -p $(dir $@)
+	$(Q)$(CC) -MMD $(CFLAGS) -c -o $@ $<
+
+$(OUT)/%.o: %.S
+	@echo AS $<
 	@mkdir -p $(dir $@)
 	$(Q)$(CC) -MMD $(CFLAGS) -c -o $@ $<
 
@@ -246,8 +276,22 @@ OOCD=openocd
 # OpenOCD configuration script for board
 OOCD_SCRIPT=scripts/openocd/lpc4337.cfg
 
+ifeq ($(M0_APP),)
+.download_flash_m0: ;
+else
 # Download program into flash memory of board
-.download_flash: $(TARGET_BIN)
+.download_flash_m0: $(TARGET_BIN) .download_flash_m0
+	@echo DOWNLOAD to M0 FLASH
+	$(Q)$(OOCD) -f $(OOCD_SCRIPT) \
+		-c "init" \
+		-c "halt 0" \
+		-c "flash write_image erase $< 0x1B000000 bin" \
+		-c "reset run" \
+		-c "shutdown" 2>&1
+endif
+
+# Download program into flash memory of board
+.download_flash: $(TARGET_BIN) .download_flash_m0
 	@echo DOWNLOAD to FLASH
 	$(Q)$(OOCD) -f $(OOCD_SCRIPT) \
 		-c "init" \
@@ -313,7 +357,7 @@ debug:
 # Remove compilation generated files -----------------------------------
 
 # Clean current selected program
-clean:
+clean: .m0app_clean
 	@echo CLEAN
 	$(Q)rm -fR $(OBJECTS) $(TARGET) $(TARGET_BIN) $(TARGET_LST) $(DEPS) $(OUT)
 	@echo 
@@ -357,6 +401,15 @@ ifeq ($(ENFORCE_NOGPL),y)
 else
 .try_enforce_no_gpl:
 endif
+
+.print_eclipse_cfg:
+	@echo $(CC) $(CFLAGS) -E -P -v -dD \"$$\{INPUTS\}\"
+
+.gen_eclipse_cfg: Makefile board.mk program.mk $(PROGRAM_PATH_AND_NAME)/config.mk
+	@mkdir -p .settings
+	@echo "$(CC) $(CFLAGS) -E -P -v -dD &quot;${INPUTS}&quot;" > .settings/language.settings.xml
+	@echo Settings writed to .settings/language.settings.xml
+
 # ----------------------------------------------------------------------
 
 .PHONY: all size download erase clean new_program select_program select_board
